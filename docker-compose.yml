@@ -1,0 +1,54 @@
+version: "3.8"
+services:
+  db:
+    image: mysql:8
+    container_name: mysql-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password     # Contraseña del usuario root
+      MYSQL_DATABASE: mydb                   # Base de datos predeterminada
+    ports:
+      - "3306:3306"                           # Exponer el puerto 3306 (puerto de MySQL)
+    volumes:
+      - mysql-data:/var/lib/mysql             # Volumen para persistencia de datos
+    networks:
+      - app-network
+
+  listar-productos:
+    depends_on:
+      - db
+    build: ./listar-productos
+    container_name: listar-productos
+    ports:
+      - "80:80"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASS: root_password
+      DB_NAME: mydb
+    networks:
+      - app-network
+
+  carrito:
+    depends_on:
+      - db
+    build: ./carrito
+    container_name: carrito
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root_password
+      DB_NAME: mydb
+      DB_PORT: 3306
+      DB_CONNECTION_LIMIT: 10
+    networks:
+      - app-network
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
