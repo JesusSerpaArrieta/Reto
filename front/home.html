@@ -85,7 +85,7 @@
           <tr><td colspan="5" class="text-center">Cargando carrito...</td></tr>
         </tbody>
       </table>
-      <button class="btn btn-primary" onclick="vaciarCarrito()">Comprar</button>
+      <button class="btn btn-primary" onclick="comprarCarrito()">Comprar</button>
     </div>
   </div>
 
@@ -226,24 +226,27 @@ async function listarCarrito() {
 }
 
 function mostrarProductosCarrito(productos) {
-  const tbody = document.getElementById("tabla-carrito"); // Accede directamente al tbody
+  const tbody = document.getElementById("tabla-carrito");
 
-  // Verifica si el elemento existe
   if (!tbody) {
     console.error("El elemento 'tabla-carrito' no se encontró en el DOM.");
     return;
   }
 
-  tbody.innerHTML = ""; // Limpiar el contenido antes de agregar nuevos productos
+  tbody.innerHTML = "";
 
-  if (!productos) {
+  if (!productos || productos.length === 0) {
     tbody.innerHTML = "<tr><td colspan='5' class='text-center'>El carrito está vacío</td></tr>";
+    window.listaCarrito = []; // Reiniciamos la variable global
     return;
   }
 
+  // Guardamos los productos en la variable global para usarlos al comprar
+  window.listaCarrito = productos;
+
   productos.forEach(producto => {
-    tbody.innerHTML +=`
-      <tr>
+    tbody.innerHTML +=
+      `<tr>
         <td>${producto.nombre}</td>
         <td>$${producto.precio}</td>
         <td>${producto.cantidad}</td>
@@ -256,6 +259,7 @@ function mostrarProductosCarrito(productos) {
       </tr>`;
   });
 }
+
 
 async function eliminarDelCarrito(productoId) {
   const token = sessionStorage.getItem("token");
@@ -290,20 +294,64 @@ async function eliminarDelCarrito(productoId) {
   }
 }
 
-async function vaciarCarrito() {
+async function comprarCarrito() {
   const token = sessionStorage.getItem("token");
-  if (!token) return;
+  if (!token) {
+    mostrarMensaje("Error de autenticación. Inicia sesión nuevamente ❌", "danger");
+    return;
+  }
+
+  // Verificamos que el carrito no esté vacío
+  if (!window.listaCarrito || window.listaCarrito.length === 0) {
+    mostrarMensaje("El carrito está vacío", "warning");
+    return;
+  }
+
+  // Transformamos los productos del carrito al formato requerido:
+  // {
+  //   "cart": [
+  //     {"name": "Producto A", "quantity": 2, "price": 15.5},
+  //     {"name": "Producto B", "quantity": 1, "price": 30.0}
+  //   ]
+  // }
+  const cartItems = window.listaCarrito.map(producto => ({
+    name: producto.nombre,
+    quantity: producto.cantidad,
+    price: producto.precio
+  }));
 
   try {
-    await fetch("http://localhost:3000/carrito/vaciar", {
-      method: "DELETE",
-      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+    const response = await fetch("https://facturacion-1-0n6r.onrender.com/generate_invoice", {
+      method: "POST",
+      headers: { 
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ cart: cartItems })
     });
-    mostrarMensaje("Carrito vaciado ✅", "success");
-    listarCarrito();
+
+    if (!response.ok) {
+      throw new Error("Error al generar la factura");
+    }
+
+    // En lugar de response.json(), obtenemos un blob ya que es un archivo PDF
+    const blob = await response.blob();
+
+    // Creamos un enlace temporal para descargar el archivo PDF
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "factura.pdf"; // Nombre del archivo a descargar
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    mostrarMensaje("Factura generada exitosamente ✅", "success");
+    listarCarrito(); // O la lógica para vaciar/actualizar el carrito
   } catch (error) {
-    console.error("Error al vaciar el carrito:", error);
-    mostrarMensaje("Error al vaciar el carrito ❌", "danger");
+    console.error("Error al generar la factura:", error);
+    mostrarMensaje("Error al generar la factura ❌", "danger");
   }
 }
 
